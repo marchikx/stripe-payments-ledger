@@ -30,7 +30,12 @@ const transitions: Record<
     "payment.refunded": "refunded",
     "payment.disputed": "disputed",
   },
-  failed: {},
+  // A PaymentIntent returns to requires_payment_method after a failed attempt, so a later
+  // retry can still succeed or require 3DS.
+  failed: {
+    "payment.requires_action": "requires_action",
+    "payment.paid": "paid",
+  },
   refunded: {},
   disputed: {},
 };
@@ -46,6 +51,18 @@ export class IllegalPaymentTransitionError extends Error {
     );
     this.name = "IllegalPaymentTransitionError";
   }
+}
+
+export const TARGET_STATE: Record<PaymentTransitionEvent, PaymentState> = {
+  "payment.requires_action": "requires_action",
+  "payment.paid": "paid",
+  "payment.failed": "failed",
+  "payment.refunded": "refunded",
+  "payment.disputed": "disputed",
+};
+
+export function canTransition(from: PaymentState, event: PaymentTransitionEvent): boolean {
+  return transitions[from][event] !== undefined;
 }
 
 export type PaymentStateMachine = {

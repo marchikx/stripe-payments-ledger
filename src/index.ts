@@ -18,7 +18,13 @@ export {
   verifyStripeSignature,
   signStripePayload,
   WebhookSignatureError,
+  OutOfOrderEventError,
+  DEFAULT_TOLERANCE_SEC,
   type WebhookHandler,
+  type WebhookAck,
+  type WorkOutcome,
+  type WorkResult,
+  type VerifyOptions,
 } from "./webhookHandler.js";
 
 export { reconcile, type ReconcileResult } from "./reconcile.js";

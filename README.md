@@ -34,9 +34,21 @@ sequenceDiagram
 ## Features
 
 - **Idempotent ledger** — duplicate Stripe event IDs are ignored on append
-- **Payment state machine** — `created` → `requires_action` → `paid` | `failed` | `refunded` | `disputed`
-- **Webhook flow** — verify signature, persist event, return `{ status: 202, workId }`, then `processWork(workId)` updates state
+- **Redelivery-safe ack** — a redelivered event returns `{ status: 202, workId: <original>, duplicate: true }` and is never applied twice
+- **Replay window** — signatures older than 5 minutes are rejected (Stripe's own default, configurable); multiple `v1` values are accepted during secret rotation
+- **Payment state machine** — `created` → `requires_action` → `paid` | `failed` | `refunded` | `disputed`; `failed` can still recover to `paid` (PaymentIntent retry)
+- **Out-of-order events** — every `processWork` returns an explicit `outcome`: `applied`, `noop`, or `ignored_stale`; a refund/dispute that arrives before the success throws `OutOfOrderEventError` so your queue retries it
 - **Reconciliation** — compare expected paid payment IDs against ledger events
+
+## Decisions and tradeoffs
+
+| Choice | Why | Cost |
+|---|---|---|
+| Ack 202, then a worker applies the transition | Stripe times out slow endpoints and retries; doing side effects inline turns a slow DB into duplicate deliveries | You need a worker and a queue |
+| Dedupe by Stripe `event.id` before enqueue | Stripe guarantees at-least-once, not exactly-once | The dedupe store must outlive Stripe's 3-day retry window in production |
+| Stale events are `ignored_stale`, not errors | Stripe does not guarantee ordering; a late `payment_failed` after `succeeded` is normal | Ignored events must be visible in logs, not silently dropped — hence the explicit outcome |
+| Early refund/dispute throws a retriable error | Applying it would skip the `paid` state; dropping it would lose money movement | Requires queue retry with backoff (see [`webhook-relay`](https://github.com/marchikx/webhook-relay)) |
+| In-memory stores in this repo | Keeps the state logic testable without infrastructure | Production needs the ledger and queue in Postgres; the Postgres outbox pattern lives in `webhook-relay` |
 
 ## Install
 
@@ -61,7 +73,7 @@ const stateMachine = createPaymentStateMachine();
 const webhooks = createWebhookHandler(ledger, stateMachine);
 
 // In your HTTP handler (raw body string, Stripe-Signature header, webhook secret):
-const { status, workId } = webhooks.handleStripeWebhook(
+const { status, workId, duplicate } = webhooks.handleStripeWebhook(
   rawBody,
   signatureHeader,
   process.env.STRIPE_WEBHOOK_SECRET!
@@ -69,7 +81,8 @@ const { status, workId } = webhooks.handleStripeWebhook(
 // Respond with status 202 immediately
 
 // In your worker:
-const { paymentId, state } = webhooks.processWork(workId);
+// outcome: "applied" | "noop" | "ignored_stale"; OutOfOrderEventError → retry later
+const { paymentId, state, outcome } = webhooks.processWork(workId);
 
 const report = reconcile(["pi_abc", "pi_def"], ledger);
 ```
