@@ -1,5 +1,7 @@
 # stripe-payments-ledger
 
+[![CI](https://github.com/marchikx/stripe-payments-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/marchikx/stripe-payments-ledger/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+
 Small TypeScript library for Stripe-style webhooks: verify signatures, append an idempotent in-memory event ledger, acknowledge with HTTP 202, and apply payment state transitions in a background worker step.
 
 ## Why this exists
