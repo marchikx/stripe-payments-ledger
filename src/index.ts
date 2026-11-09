@@ -28,3 +28,12 @@ export {
 } from "./webhookHandler.js";
 
 export { reconcile, type ReconcileResult } from "./reconcile.js";
+
+export {
+  createMemoryLedgerStore,
+  createMemoryWorkStore,
+  type LedgerStore,
+  type WorkStore,
+  type WorkItem,
+} from "./stores.js";
+
